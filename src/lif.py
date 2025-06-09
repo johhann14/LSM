@@ -26,7 +26,7 @@ class LIF:
         
         else:
             tau = self.R * self.C
-            self.U += (self.dt/tau) * (-self.U + I[self.step]*self.R)
+            self.U += (self.dt/tau) * (-self.U + I*self.R)
             self.step+=1
             return self.U
 
@@ -55,7 +55,7 @@ class LIF:
         plt.show()
 
     def paramaters(self):
-        print(f'Model\'s parameters')
+        print(f'LIF\'s parameters')
         print(f'U_init : {self.U_init}')
         print(f'U_reset : {self.U_reset}')
         print(f'threshold : {self.threshold}')
