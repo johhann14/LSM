@@ -1,6 +1,6 @@
 import numpy as np 
 import matplotlib.pyplot as plt 
-
+import sys
 from utils import euclidean_distance, generate_neurons, probability_connection
 
 from synapse import Synapse
@@ -14,7 +14,7 @@ class LSM:
 
     Initialisation of the reservoir's topology
     """
-    def __init__(self, N_liquid, N_input, liquid_net_shape, input_net_shape, w_in, w_out, distribution, p_inh, refractory_time, connections_parameters, apply_dale, lbd=1.2):
+    def __init__(self, N_liquid, N_input, liquid_net_shape, input_net_shape, w_in, w_out, distribution, p_inh, refractory_time, connections_parameters, apply_dale, lbd=3.3):
         """
         Reservoir initialisation method
         N_r: number of internal units (neurons)
@@ -109,9 +109,12 @@ class LSM:
     
     
     def update_liquid(self):
+        i = 0
         for neuron in self.liquid_neurons:
-            neuron.euler_iteration(neuron.Itot)#after that Itot = 0
-
+            neuron.euler_iteration(neuron.Itot)
+            if neuron.prob == True:
+                print(neuron.step, i)
+            i+=1
     def inject_input_to_lsm(self, encoded_val):
         for neuron in self.input_layer:
             neuron.euler_iteration(encoded_val) #si on considere que c juste recevoir un courant 
@@ -220,10 +223,16 @@ class LSM:
                 Delay_trans=self.connections_parameters[(t_pre,t_pos)][5] 	# (msecond) In Maass paper the transmission delay is 0.8 to II, IE and EI and 1.5 to EE
 
                 U_ds=abs(np.random.normal(loc=UMarkram, scale=UMarkram/2))
+                if U_ds < 0:
+                    U_ds = np.random.uniform(0,1)
                 D_ds=abs(np.random.normal(loc=DMarkram, scale=DMarkram/2))
+                if D_ds < 0:
+                    D_ds = np.random.uniform(0,1)
                 F_ds=abs(np.random.normal(loc=FMarkram, scale=FMarkram/2))
-                W_n=sign*abs(np.random.normal(loc=AMaass, scale=AMaass/2)) # Because AMaass is negative (inhibitory) so is inserted the "-" here
-
+                if F_ds < 0:
+                    F_ds = np.random.uniform(0,1)
+                #W_n=sign*abs(np.random.normal(loc=AMaass, scale=AMaass/2)) # Because AMaass is negative (inhibitory) so is inserted the "-" here
+                W_n = -18e-9 if j in exc_index_r else 9e-9 #special case for input-liquid synapse
             
                 p_connection = probability_connection(CGupta, euclidean_distance(positions_list_i[i], positions_list_r[j]), self.lbd)
                 t_connection = (t_pre, t_pos)
@@ -278,7 +287,6 @@ class LSM:
             for j in range(self.N_liquid):
                 if i!=j:
                     if i in inh_index:
-                        sign = -1
                         if j in inh_index:
                             ## (II)
                             (t_pre, t_pos)=(0,0)
@@ -287,7 +295,6 @@ class LSM:
                             (t_pre, t_pos) = (0,1)
                     
                     else:
-                        sign = 1
                         if j in inh_index:
                             ##(EI)
                             (t_pre, t_pos) = (1,0)
@@ -304,9 +311,21 @@ class LSM:
                     Delay_trans=self.connections_parameters[(t_pre,t_pos)][5] 	# (msecond) In Maass paper the transmission delay is 0.8 to II, IE and EI and 1.5 to EE
 
                     U_ds=abs(np.random.normal(loc=UMarkram, scale=UMarkram/2))
+                    if U_ds < 0:
+                        U_ds = np.random.uniform(0,1)
                     D_ds=abs(np.random.normal(loc=DMarkram, scale=DMarkram/2))
+                    if D_ds < 0:
+                        D_ds = np.random.uniform(0,1)
                     F_ds=abs(np.random.normal(loc=FMarkram, scale=FMarkram/2))
-                    W_n=sign*abs(np.random.normal(loc=AMaass, scale=AMaass/2)) # Because AMaass is negative (inhibitory) so is inserted the "-" here
+                    if F_ds < 0:
+                        F_ds = np.random.uniform(0,1)
+                    shape = 1.0
+                    scale = np.abs(AMaass)
+                    A_sample = np.random.gamma(shape, scale)
+                    if AMaass < 0:
+                        W_n = -A_sample
+                    else:
+                        W_n = A_sample
 
                 
                     p_connection = probability_connection(CGupta, euclidean_distance(positions_list[i], positions_list[j]), self.lbd)
@@ -490,5 +509,6 @@ class LSM:
         print(f'\t apply_dale : {self.apply_dale}')
         print(f'\t n_inh : {self.n_inh_liquid}')
         print(f'\t n_exc : {self.n_exc_liquid}')
+        print(f'\t Number of connections input-layer-reservoir : {len(self.input_synapses)}')
         print(f'\n----------------------------------------------\n')
 

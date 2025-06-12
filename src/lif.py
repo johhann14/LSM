@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
 class LIF:
     def __init__(self, U_init, U_reset, dt, T, R, C, threshold, Ib):
         self.U_init = U_init
@@ -17,13 +16,19 @@ class LIF:
         self.spike_trace = []
         self.spiked_before = False
         self.Itot = 0
+        self.Itot_trace = []
 
     def receive_input_current(self, I):
         self.Itot += I
     
 
     def euler_iteration(self, I):
+        if self.U > 100:
+            self.prob = True
+        else:
+            self.prob = False
         self.U_trace.append(self.U)
+        self.Itot_trace.append(self.Itot)
         if self.U > self.threshold:
             self.spiked_before = True
             self.U = self.U_reset
@@ -35,7 +40,7 @@ class LIF:
         else:
             self.spiked_before = False
             tau = self.R * self.C
-            self.U += (self.dt/tau) * (-self.U + (I+self.Ib)*self.R)
+            self.U += (self.dt/tau) * (-self.U + I*self.R)
             self.step+=1
             self.Itot = 0
             return self.U

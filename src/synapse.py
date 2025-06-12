@@ -13,7 +13,7 @@ class Synapse:
         self.W_n, self.U_ds, self.D_ds, self. F_ds = connection_infos[2]
         self.delay_trans = connection_infos[3]
         self.t_connection = connection_infos[4]
-        self.tau_s = 3e-3 if connection_infos[4]==1 else 6e-3
+        self.tau_s = 3e-3 if connection_infos[4][0]==1 else 6e-3
         self.dt = dt
         # Plasticity variables
         self.x = 1
@@ -25,18 +25,24 @@ class Synapse:
         self.x_trace = [self.x]
         self.u_trace = [self.u]
         self.I_trace = [self.I]
+        self.spike_trace = []
 
     def propagate(self, spike_bool, t=None):
         self.step+=1
         if spike_bool:
             self.nb+=1
             self.u += self.U_ds * (1-self.u)
-            self.I += self.W_n * self.u * self.x
             self.x += -self.u * self.x
+            #self.u = np.clip(self.u, 0, 1)
+            #self.x = np.clip(self.x, 0, 1)
+            self.I += self.W_n * self.u * self.x
         else:
             self.u += self.dt * (-self.u/self.F_ds)
             self.x += ((1-self.x)/self.D_ds) * self.dt
+            #self.u = np.clip(self.u, 0, 1)
+            #self.x = np.clip(self.x, 0, 1)
             self.I += (-self.I/self.tau_s)*self.dt
+        self.spike_trace.append(spike_bool)
         self.x_trace.append(self.x)
         self.u_trace.append(self.u)
         self.I_trace.append(self.I)
@@ -54,7 +60,8 @@ class Synapse:
         ax1 = fig.add_subplot(3,1,1)
         ax1.plot(self.x_trace, c='red')
         ax1.set_ylabel('x')
-        ax1.set_xlim(0,300)
+        ax1.set_xlim(0, 300)
+        ax1.set_ylim(0,30)
         ax2 = fig.add_subplot(3,1,2)
         ax2.plot(self.u_trace, c='blue')
         ax2.set_ylabel('u')
