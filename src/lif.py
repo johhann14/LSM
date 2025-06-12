@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class LIF:
-    def __init__(self, U_init, U_reset, dt, T, R, C, threshold):
+    def __init__(self, U_init, U_reset, dt, T, R, C, threshold, Ib):
         self.U_init = U_init
         self.U_reset = U_reset
         self.threshold = threshold
@@ -10,24 +10,34 @@ class LIF:
         self.R = R
         self.C = C
         self.U = U_init
+        self.Ib = Ib
         self.step = 0
         self.T = T
         self.U_trace = []
         self.spike_trace = []
- 
+        self.spiked_before = False
+        self.Itot = 0
+
+    def receive_input_current(self, I):
+        self.Itot += I
+    
+
     def euler_iteration(self, I):
         self.U_trace.append(self.U)
-
         if self.U > self.threshold:
+            self.spiked_before = True
             self.U = self.U_reset
             self.spike_trace.append(self.step)
             self.step+=1
+            self.Itot = 0
             return self.U
         
         else:
+            self.spiked_before = False
             tau = self.R * self.C
-            self.U += (self.dt/tau) * (-self.U + I*self.R)
+            self.U += (self.dt/tau) * (-self.U + (I+self.Ib)*self.R)
             self.step+=1
+            self.Itot = 0
             return self.U
 
     def reset(self):
@@ -51,7 +61,7 @@ class LIF:
         ax[2].eventplot(self.spike_trace, color='red')
         ax[2].set_ylabel('Output Spikes')
         ax[2].set_xlabel('Time step')
-        
+        plt.savefig("results/lif_basic_implementation.png") 
         plt.show()
 
     def paramaters(self):
@@ -59,6 +69,7 @@ class LIF:
         print(f'U_init : {self.U_init}')
         print(f'U_reset : {self.U_reset}')
         print(f'threshold : {self.threshold}')
+        print(f'Ib : {self.Ib}')
         print(f'dt : {self.dt}')
         print(f'T : {self.T}')
         print(f'R : {self.R}')

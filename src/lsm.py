@@ -1,7 +1,8 @@
 import numpy as np 
 import matplotlib.pyplot as plt 
 
-from utils import euclidean_distance
+from utils import euclidean_distance, generate_neurons, probability_connection
+
 from synapse import Synapse
 from lif import LIF
 
@@ -13,7 +14,7 @@ class LSM:
 
     Initialisation of the reservoir's topology
     """
-    def __init__(self, N_r, N_i, r_net_shape, i_net_shape, w_in, w_out, distribution, p_inh, refractory_time, connections_parameters, apply_dale, lbd=1.2):
+    def __init__(self, N_liquid, N_input, liquid_net_shape, input_net_shape, w_in, w_out, distribution, p_inh, refractory_time, connections_parameters, apply_dale, lbd=1.2):
         """
         Reservoir initialisation method
         N_r: number of internal units (neurons)
@@ -29,8 +30,8 @@ class LSM:
         lbd: 
 
         """
-        self.N_r = N_r  
-        self.N_i = N_i                                                        
+        self.N_liquid = N_liquid  
+        self.N_input = N_input                                                        
         self.distribution = distribution
         self.p_inh = p_inh
         self.refractory_time = refractory_time
@@ -39,23 +40,23 @@ class LSM:
         self.w_in = w_in
         self.w_out = w_out
         self.apply_dale = apply_dale
-        self.r_net_shape = r_net_shape
-        self.i_net_shape = i_net_shape
-        self.inh, self.exc, self.n_inh, self.n_exc = self.assign_exc_inh(N_r)
-        self.inh_i, self.exc_i, self.n_inh_i, self.n_exc_i = self.assign_exc_inh(N_i)
-        self.i_r_topology = self.input_reservoir_topology()
-        self.i_topology = self.internal_topology()
-        self.input_reservoir_synapses = self.generate_synapses(self.i_r_topology) # list of synapsesa
-        self.internal_synapses = self.generate_synapses(self.i_topology)
-        self.input_neurons = self.generate_neurons(N_i)
-        self.internal_neurons = self.generate_neurons(N_r)
+        self.liquid_net_shape = liquid_net_shape
+        self.input_net_shape = input_net_shape
+        self.inh_liquid, self.exc_liquid, self.n_inh_liquid, self.n_exc_liquid = self.assign_exc_inh(N_liquid)
+        self.inh_input, self.exc_input, self.n_inh_input, self.n_exc_input = self.assign_exc_inh(N_input)
+        self.input_topology = self.input_reservoir_topology()
+        self.liquid_topology = self.internal_topology()
+        self.input_synapses = self.generate_synapses(self.input_topology) # list of synapsesa
+        self.liquid_synapses = self.generate_synapses(self.liquid_topology)
+        self.input_layer = generate_neurons(N_input)
+        self.liquid_neurons = generate_neurons(N_liquid)
 
 
     def assign_exc_inh(self, N):
 
         if self.apply_dale:
             inh = np.random.rand(N,1) < self.p_inh
-            exc = ~inh
+            exc = ~inh #inversing bits
             
         else:
             inh = np.random.rand(N,1) < 0
@@ -66,48 +67,67 @@ class LSM:
 
         return inh, exc, n_inh, n_exc
 
-    def p_connection(self, C, distance, lbd):
-        """
-        Compute the probability of the connection between two neurons
-
-        Returns
-            p: probability of the connection between two neurons
-
-        """
-        p = C * np.exp(-np.power((distance/lbd), 2))
-        return p
 
     def generate_synapses(self, topology):
+        """
+        Generate synapses given a topology
+
+        Returns
+            List of synapses
+        """
         print(f"Generate synapses : Begin...")
         connections_exc = topology['exc']
         connections_inh = topology['inh']
         synapse_list = []
 
         for inh_infos in connections_inh:
-            s = Synapse(inh_infos, 0)
+            s = Synapse(inh_infos, dt=1e-3)
             synapse_list.append(s)
         for exc_infos in connections_exc:
-            s = Synapse(exc_infos, 0)
+            s = Synapse(exc_infos, dt=1e-3)
             synapse_list.append(s)
 
         print(f"Generate synapses : Done!")
         return synapse_list
 
-    def generate_neurons(self, N):
-        print(f'Generate neurons : Begin...')
-        neurons_list = []
-        for neuron in range(N):
-            neurons_list.append(LIF(0.4, 0, 1e-3, 3, 5.1, 5e-3, 0.3))
-        print(f'Generate neurons : Done!')
-        return neurons_list
 
-    def compute(self, T, dt):
-        #on boucle sur dt
-        # besoind 'une fonction qui update le potential de chaque neuron et qui recrod qui spike a qqui
-        # fonction qui simule chaque synapse
-        # list synape input-reservoir
-        # list internal synapse
-        return None
+
+    def STP(self):
+        for synapse in self.liquid_synapses:
+            pre_neuron = self.liquid_neurons[synapse.i]
+            post_neuron = self.liquid_neurons[synapse.j]
+            didSpike = pre_neuron.spiked_before
+            I = synapse.propagate(didSpike)
+            post_neuron.receive_input_current(I)
+
+        for synapse in self.input_synapses:
+            pre_neuron = self.input_layer[synapse.i]
+            post_neuron = self.liquid_neurons[synapse.j]
+            didSpike = pre_neuron.spiked_before
+            I = synapse.propagate(didSpike)
+            post_neuron.receive_input_current(I)
+    
+    
+    def update_liquid(self):
+        for neuron in self.liquid_neurons:
+            neuron.euler_iteration(neuron.Itot)#after that Itot = 0
+
+    def inject_input_to_lsm(self, encoded_val):
+        for neuron in self.input_layer:
+            neuron.euler_iteration(encoded_val) #si on considere que c juste recevoir un courant 
+        
+
+    def forward(self, T, dt, encoded_input):
+        print(f'forward() : Begin...')
+
+        n_steps = int(T/dt)
+        for step in range(n_steps):
+            self.inject_input_to_lsm(encoded_input[step]) # inject input to the input-layer
+            self.STP()                                    # Short-term plasticity
+            self.update_liquid()                          # update the liquid according to the synapse's dynamics
+        
+        print(f'forward() : Done!') 
+        
 
 
 
@@ -119,11 +139,11 @@ class LSM:
             array: array of triplet (pos_x, pos_y, pos_z)
         """
         print('Mapping : Begin...')
-        n_x, n_y, n_z = self.r_net_shape
+        n_x, n_y, n_z = self.liquid_net_shape
 
         #Center axis except the axis representating the depth of the columns (here y axis)
         dx = -n_x/2.0
-        dy = self.i_net_shape[1]
+        dy = 0
         dz = -n_z/2.0
 
         positions_list = np.array([(x+dx, y+dy, z+dz) for x in range(n_x) for y in range(n_y) for z in range(n_z)])
@@ -139,11 +159,11 @@ class LSM:
             array: array of triplet (pos_x, pos_y, pos_z)
         """
         print('Mapping : Begin...')
-        n_x, n_y, n_z = self.i_net_shape
+        n_x, n_y, n_z = self.input_net_shape
 
         #Center axis except the axis representating the depth of the columns (here y axis)
         dx = -n_x/2.0
-        dy = 0
+        dy = self.liquid_net_shape[1]
         dz = -n_z/2.0
 
         positions_list = np.array([(x+dx, y+dy, z+dz) for x in range(n_x) for y in range(n_y) for z in range(n_z)])
@@ -152,14 +172,17 @@ class LSM:
         return positions_list
 
     def input_reservoir_topology(self):
+        """
+        Create the input-reservoir topology
+        """
         print('Creation of the input-reservoir topology: Begin...')
    
         #list of index of inhibitory and excitatory neurons
-        inh_index_i = np.where(self.inh_i == True)[0]
-        exc_index_i = np.where(self.exc_i == True)[0]
+        inh_index_i = np.where(self.inh_input == True)[0]
+        exc_index_i = np.where(self.exc_input == True)[0]
 
-        inh_index_r = np.where(self.inh == True)[0]
-        exc_index_r = np.where(self.exc == True)[0]
+        inh_index_r = np.where(self.inh_liquid == True)[0]
+        exc_index_r = np.where(self.exc_liquid == True)[0]
         #list of the positions of the neurons 
         positions_list_r = self.mapping_reservoir()
         positions_list_i = self.mapping_input() 
@@ -167,12 +190,12 @@ class LSM:
         connections_inh = []
         connections_exc = []
 
-        for i in range(self.N_r):
+        for i in range(self.N_input):
             
-            for j in range(self.N_i):
-                if i in inh_index_r:
+            for j in range(self.N_liquid):
+                if i in inh_index_i:
                     sign = -1
-                    if j in inh_index_i:
+                    if j in inh_index_r:
                         ## (II)
                         (t_pre, t_pos)=(0,0)
                     else:
@@ -181,7 +204,7 @@ class LSM:
                 
                 else:
                     sign = 1
-                    if j in inh_index_i:
+                    if j in inh_index_r:
                         ##(EI)
                         (t_pre, t_pos) = (1,0)
                     else:
@@ -202,9 +225,8 @@ class LSM:
                 W_n=sign*abs(np.random.normal(loc=AMaass, scale=AMaass/2)) # Because AMaass is negative (inhibitory) so is inserted the "-" here
 
             
-                p_connection = self.p_connection(CGupta, euclidean_distance(positions_list_i[j], positions_list_r[i]), self.lbd)
+                p_connection = probability_connection(CGupta, euclidean_distance(positions_list_i[i], positions_list_r[j]), self.lbd)
                 t_connection = (t_pre, t_pos)
-                
                 if np.random.uniform() <= p_connection:
                     if t_connection[0]==0:
                         connections_inh.append(
@@ -240,8 +262,8 @@ class LSM:
         print('Creation of the reservoir topology : Begin...')
    
         #list of index of inhibitory and excitatory neurons
-        inh_index = np.where(self.inh == True)[0]
-        exc_index = np.where(self.exc == True)[0]
+        inh_index = np.where(self.inh_liquid == True)[0]
+        exc_index = np.where(self.exc_liquid == True)[0]
 
         #list of the positions of the neurons 
         positions_list = self.mapping_reservoir()
@@ -251,9 +273,9 @@ class LSM:
         connections_exc = []
 
 
-        for i in range(self.N_r):
+        for i in range(self.N_liquid):
             
-            for j in range(self.N_r):
+            for j in range(self.N_liquid):
                 if i!=j:
                     if i in inh_index:
                         sign = -1
@@ -287,9 +309,8 @@ class LSM:
                     W_n=sign*abs(np.random.normal(loc=AMaass, scale=AMaass/2)) # Because AMaass is negative (inhibitory) so is inserted the "-" here
 
                 
-                    p_connection = self.p_connection(CGupta, euclidean_distance(positions_list[i], positions_list[j]), self.lbd)
+                    p_connection = probability_connection(CGupta, euclidean_distance(positions_list[i], positions_list[j]), self.lbd)
                     t_connection = (t_pre, t_pos)
-                    
                     if np.random.uniform() <= p_connection:
                         if t_connection[0]==0:
                             connections_inh.append(
@@ -321,86 +342,19 @@ class LSM:
 
 
 
-    def plot_input_reservoir(self, topology):
-        print('Plotting the input-reservoir : Begin...')
-        fig = plt.figure(figsize=(12,8))
-        fig.suptitle('Reservoir architecture (Cortical Column)')
-        
-        inh_i = self.inh_i
-        inh_r = self.inh
-        pos_i = topology['pos_i']
-        pos_r = topology['pos_r']
-        print(f'len pos_i : {len(pos_i)} et len pos_r : {len(pos_r)}')
-        x_i = [p[0] for p in pos_i]
-        y_i = [p[1] for p in pos_i]
-        z_i = [p[2] for p in pos_i]
-        x_r = [p[0] for p in pos_r]
-        y_r = [p[1] for p in pos_r]
-        z_r = [p[2] for p in pos_r]
-        c_i = ['blue' if i else 'red' for i in inh_i]
-        c_r = ['blue' if i else 'red' for i in inh_r]
-        ax1 = fig.add_subplot(1, 2, 1, projection='3d')
-        ax1.scatter(x_i,y_i,z_i , color='red')
-        ax1.scatter(x_r,y_r,z_r , color='green', marker='x')
-        ax1.set_title('Mapping of the neurons in the space')
-        ax1.set_xlabel('x')
-        ax1.set_ylabel('y')
-        ax1.set_zlabel('z')
-        ax1.legend()
-        
-        """
-        I_connections = topology['inh']
-        i_to = [c[0] for c in I_connections] # list of tuple(i,j)
-        E_connections = topology['exc']
-        e_to = [c[0] for c in E_connections] # list of tuple(i,j)
-
-        #FOR I to
-        x1 = []
-        y1 = []
-        z1 = []
-        for c in i_to:
-            #(i,j)
-            i,j = c
-            x1.append(pos[i][0])
-            x1.append(pos[j][0])
-            y1.append(pos[i][1])
-            y1.append(pos[j][1])
-            z1.append(pos[i][2])
-            z1.append(pos[j][2])
-        x2 = []
-        y2 = []
-        z2= []
-        for c in e_to:
-            i,j = c
-            x2.append(pos[i][0])
-            x2.append(pos[j][0])
-            y2.append(pos[i][1])
-            y2.append(pos[j][1])
-            z2.append(pos[i][2])
-            z2.append(pos[j][2])
-
-        
-        ax2 = fig.add_subplot(1,2,2, projection='3d')
-        ax2.plot(x1,y1,z1, color='blue', lw=0.6)
-        ax2.plot(x2, y2, z2, color='red', lw=.6)
-        ax2.scatter(x, y, z, alpha=1, color='green')
-        ax2.set_title('Synapse connections of the reservoir')
-        ax2.set_xlabel('x')
-        ax2.set_ylabel('y')
-        ax2.set_zlabel('z')
-        """
-        plt.show()
-        print('Plotting the Reservoir : Done!')
 
     def plot_lsm_topology(self, input_reservoir_topology, internal_topology):
+        """
+        Plot the LSM's architecture (both input-reservoir and internal topology)
+        """
         print('Plotting the Reservoir : Begin...')
-        fig = plt.figure(figsize=(12,8))
+        fig = plt.figure(figsize=(15,10))
         fig.suptitle('LSM architecture (Cortical Column)')
         
-        inh_r = self.inh
+        inh_r = self.inh_liquid
         
         # INPUT RESERVOIR
-        inh_i = self.inh_i
+        inh_i = self.inh_input
         pos_i = input_reservoir_topology['pos_i']
         x_i = [p[0] for p in pos_i]
         y_i = [p[1] for p in pos_i]
@@ -415,12 +369,11 @@ class LSM:
         ax1 = fig.add_subplot(2, 2, 1, projection='3d')
 
         ax1.scatter(x_r,y_r,z_r , color=c_r, marker='x', alpha=1)
-        ax1.scatter(x_i,y_i,z_i , color=c_i, alpha=1)
+        ax1.scatter(x_i,y_i,z_i , color=c_i, alpha=1, edgecolors='k')
         ax1.set_title('Mapping of the input-reservoir neurons into the space')
         ax1.set_xlabel('x')
         ax1.set_ylabel('y')
         ax1.set_zlabel('z')
-        ax1.legend()
 
 
         #INTERNAL===================================
@@ -433,30 +386,24 @@ class LSM:
 
         #RESERVOIR
         ax2 = fig.add_subplot(2, 2, 2, projection='3d')
-        ax2.scatter(x,y,z , color=c, alpha=1)
+        ax2.scatter(x,y,z , color=c, alpha=1, edgecolors='k')
         ax2.set_title('Mapping of the internal neurons into the space')
         ax2.set_xlabel('x')
         ax2.set_ylabel('y')
         ax2.set_zlabel('z')
-        ax2.legend()
 #==================================        
 
         I_connections = input_reservoir_topology['inh']
         i_to = [c[0] for c in I_connections] # list of tuple(i,j)
         E_connections = input_reservoir_topology['exc']
         e_to = [c[0] for c in E_connections] # list of tuple(i,j)
-        print("DEBUG")
-        print(f"len de I : {len(I_connections)}")
-        print(f"len de pos_r")
-        print(input_reservoir_topology['pos_r'][:5])
-        inh_positions_pre = [input_reservoir_topology['pos_r'][i[0]] for i in i_to] # [(x,y,z)]
-        inh_positions_post = [input_reservoir_topology['pos_i'][i[1]]for i in i_to] # [(x,y,z)]
-        exc_positions_pre = [input_reservoir_topology['pos_r'][i[0]] for i in e_to]
+        inh_positions_pre = [input_reservoir_topology['pos_i'][i[0]] for i in i_to] # [(x,y,z)]
+        inh_positions_post = [input_reservoir_topology['pos_r'][i[1]]for i in i_to] # [(x,y,z)]
+        exc_positions_pre = [input_reservoir_topology['pos_i'][i[0]] for i in e_to]
         exc_positions_post = [input_reservoir_topology['pos_r'][i[1]] for i in e_to]
          
         n_exc = len(exc_positions_pre)
         n_inh = len(inh_positions_pre)
-        print("okokkokok", n_exc, n_inh)
 
         ax3= fig.add_subplot(2,2,3, projection='3d')
         for i in range(n_inh):
@@ -472,38 +419,7 @@ class LSM:
 
 
         ax3.scatter(x_r,y_r,z_r, color='green', marker='x', alpha=1)
-        ax3.scatter(x_i,y_i,z_i, color='green', alpha=1)
-        
-        """
-        #FOR I to
-        x1 = []
-        y1 = []
-        z1 = []
-        for c in e_to:
-            #(i,j)
-            i,j = c
-            x1.append(inh_positions_post[i][0])
-            x1.append(inh_positions_post[j][0])
-            y1.append(inh_positions_post[i][1])
-            y1.append(inh_positions_post[j][1])
-            z1.append(inh_positions_post[i][2])
-            z1.append(inh_positions_post[j][2])
-        x2 = []
-        y2 = []
-        z2= []
-        for c in i_to:
-            i,j = c
-            x2.append(inh_positions_pre[i][0])
-            x2.append(inh_positions_pre[j][0])
-            y2.append(inh_positions_pre[i][1])
-            y2.append(inh_positions_pre[j][1])
-            z2.append(inh_positions_pre[i][2])
-            z2.append(inh_positions_pre[j][2])
-
-        ax3.plot(x1,y1,z1, color='red', lw=0.6)
-        ax3.plot(x2, y2, z2, color='blue', lw=.6)
-        ax3.scatter(x, y, z, alpha=1, color='green')
-        """ 
+        ax3.scatter(x_i,y_i,z_i, color='green', alpha=1, edgecolors='k')
         ax3.set_title('Input-reservoir synapse connections')
         ax3.set_xlabel('x')
         ax3.set_ylabel('y')
@@ -546,7 +462,7 @@ class LSM:
         ax4= fig.add_subplot(2,2,4, projection='3d')
         ax4.plot(x1,y1,z1, color='blue', lw=0.6)
         ax4.plot(x2, y2, z2, color='red', lw=.6)
-        ax4.scatter(x, y, z, alpha=1, color='green')
+        ax4.scatter(x, y, z, alpha=1, color='green', edgecolors='k')
         ax4.set_title('Internal synapse connections ')
         ax4.set_xlabel('x')
         ax4.set_ylabel('y')
@@ -562,8 +478,8 @@ class LSM:
     def paramaters(self):
         print(f'\n----------------------------------------------\n')
         print(f'Model\'s parameters :')
-        print(f'\t N_r : {self.N_r}')
-        print(f'\t N_i : {self.N_i}')
+        print(f'\t N_r : {self.N_liquid}')
+        print(f'\t N_i : {self.N_input}')
         print(f'\t type of distribution : {self.distribution}')
         print(f'\t p_inh : {self.p_inh}')
         print(f'\t refractory time : {self.refractory_time}')
@@ -572,7 +488,7 @@ class LSM:
         print(f'\t w_in : {self.w_in}')
         print(f'\t w_out : {self.w_out}')
         print(f'\t apply_dale : {self.apply_dale}')
-        print(f'\t n_inh : {self.n_inh}')
-        print(f'\t n_exc : {self.n_exc}')
+        print(f'\t n_inh : {self.n_inh_liquid}')
+        print(f'\t n_exc : {self.n_exc_liquid}')
         print(f'\n----------------------------------------------\n')
 
