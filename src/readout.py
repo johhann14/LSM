@@ -18,16 +18,22 @@ class Readout():
         self.Wreadout = np.random.randn(N_readout, lsm.N_liquid)
 
 
-
     def output(self, liquid_state):
         """
         Projects a liquid state into a readout reponse (n_liquid,1) -> (n_readout, 1)
         """
         return self.W @ liquid_state # (n_redout, 1)
 
-    def predict(self, signal, steps):
+    def predict(self, signal, steps, Ic):
         u = signal[-1] # we take u(T) to predict y(T+1)
-        prediction = np.zeros()
+        prediction = np.zeros(steps, self.N_readout)
+        for step in range(steps):
+            liquid_state = self.lsm.forward(u, Ic)
+            y = self.output(liquid_state=liquid_state)
+            prediction[step] = y.copy()
+            u = y
+        
+
 
     def train(self, liquid, y_train):
         R = np.zeros((self.N, self.n_steps)) #each column is a state at time t

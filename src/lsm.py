@@ -2,8 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt 
 import sys
 from utils import euclidean_distance, generate_neurons, probability_connection, make_input_layer, make_liquid_topology, assign_exc_inh, generate_synapses
-
+from utils import liquid_default_parameters
 from synapse import Synapse
+from lif import LIF
 from lif import LIF
 
 class LSM:
@@ -43,34 +44,25 @@ class LSM:
 
         self.liquid_topology = make_liquid_topology(connections_parameters, liquid_net_shape, self.inh_liquid, lbd)
         
-        self.liquid_neurons = generate_neurons(N_liquid, dt)
-
-        self.synapses_inh = generate_synapses(self.liquid_topology['inh'])
-        self.synapses_exc = generate_synapses(self.liquid_topology['exc'])
+        self.liquid_neurons = LIF(N=N_liquid, params=liquid_default_parameters, dt=dt)
+        self.synapses = Synapse(self.liquid_topology['exc'] + self.liquid_topology['inh'], dt)
         self.W_in = np.random.normal(size=(1, N_liquid)) #inverser les dim
 
-    def test(self):
-        for n in self.liquid_neurons:
-            n.iteration()
-        for s in self.synapses_exc:
-            pre_neuron = self.liquid_neurons[s.i]
-            post_neuron = self.liquid_neurons[s.j]
-            post_neuron.ie+= s.propagate(pre_neuron.spiked_before)
-        for s in self.synapses_inh:
-            pre_neuron = self.liquid_neurons[s.i]
-            post_neuron = self.liquid_neurons[s.j]
-            post_neuron.ii+= s.propagate(pre_neuron.spiked_before)
+    def forward(self, inp=None, Ic=None):
+        if inp:    
+            for i in range(self.N_liquid):
+                self.liquid_neurons.ie[i]+= self.W_in[0][i] * inp * Ic
+        
+        self.liquid_neurons.iteration()
+        pre_id = self.synapses.i.astype(np.int64)
+        post_id = self.synapses.j.astype(np.int64)
+        spike_bool = self.liquid_neurons.spiked_before[pre_id]
+        I = self.synapses.propagate(spike_bool)
+        self.liquid_neurons.ie[post_id] += I
 
     def reset(self):
-        print(f"Reset() : Begin...")
-        for neuron in self.liquid_neurons:
-            neuron.reset()
-
-        for synapse in self.synapses_exc:
-            synapse.reset()
-        for synapse in self.synapses_inh:
-            synapse.reset()
-        print(f"Reset() : Done!")
+        self.liquid_neurons.reset()
+        self.synapses.reset()
 
     def paramaters(self):
         print(f'\n----------------------------------------------\n')

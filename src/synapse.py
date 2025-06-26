@@ -6,72 +6,47 @@ class Synapse:
     Synapse object following Markram and Tsodysk : Short-term synaptic plasticity: http://www.scholarpedia.org/article/Short-term_synaptic_plasticity 
     Modelize the synapse and its dynamic behavior
     """
-    def __init__(self, connection_infos, dt):
-        self.i = connection_infos[0][0]
-        self.j = connection_infos[0][1]
-        self.p_connection = connection_infos[1]
-        self.W_n, self.U_ds, self.D_ds, self. F_ds = connection_infos[2]
-        self.delay_trans = connection_infos[3]
-        self.t_connection = connection_infos[4]
-
-        self.tau_s = 3e-3 if connection_infos[4][0]==1 else 6e-3
+    def __init__(self, list_connection_infos, dt):
+        self.N = len(list_connection_infos)
+        self.i = np.zeros(self.N)
+        self.j = np.zeros(self.N)
+        self.p_connection = np.zeros(self.N)
+        self.W_n = np.zeros(self.N)
+        self.U_ds = np.zeros(self.N)
+        self.D_ds = np.zeros(self.N)
+        self.F_ds = np.zeros(self.N)
+        self.delay_trans = np.zeros(self.N)
+        self.tau_s = np.zeros(self.N)
+        self.x = np.ones(self.N)
+        self.u = np.zeros(self.N)
+        for s in range(self.N):
+            self.i[s] = list_connection_infos[s][0][0]
+            self.j[s] = list_connection_infos[s][0][1]
+            self.p_connection[s] = list_connection_infos[s][1]
+            self.W_n[s], self.U_ds[s], self.D_ds[s], self.F_ds[s] = list_connection_infos[s][2]
+            self.delay_trans[s] = list_connection_infos[s][3]
+            self.tau_s[s] = 3e-3 if self.i[s]==1 else 6e-3
+        
         self.dt = dt
-        # Plasticity variables
-        self.x = 1
-        self.u = 0
-        self.I = 0
         self.step = 0
-        self.nb = 0
-        #Trace
-        self.x_trace = [self.x]
-        self.u_trace = [self.u]
-        self.I_trace = [self.I]
-        self.spike_trace = []
-        self.delay_steps = 1
-        self.spike_buffer = [False] * (self.delay_steps + 1)
-        self.buffer_index = 0
-        self.bool_trace = [] 
     
     def reset(self):
         # Plasticity variables
-        self.x = 1
-        self.u = 0
-        self.I = 0
+        self.x = np.ones(self.N)
+        self.u = np.zeros(self.N)
         self.step = 0
-        self.nb = 0
-        #Trace
-        self.x_trace = [self.x]
-        self.u_trace = [self.u]
-        self.I_trace = [0]
-        self.spike_trace = []
-        self.delay_steps = 1
-        self.spike_buffer = [False] * (self.delay_steps + 1)
-        self.buffer_index = 0 
     
-
     def propagate(self, spike_bool):
 
-        if spike_bool:
-            self.u += self.U_ds * (1-self.u)
-          #  self.x += -self.u * self.x
-            self.x *= (1-self.u)
-            #self.I += self.W_n * self.u * self.x
-            I_instant = self.W_n * self.u * self.x
-        else:
-            self.u *= np.exp(-self.dt/self.F_ds)
-            #self.u = self.dt * ((self.U_ds -self.u)/self.F_ds)
-           # self.x += ((1-self.x)/self.D_ds) * self.dt
-            self.x = 1 - (1 - self.x) * np.exp(-self.dt/self.D_ds)
-            #self.I -= (self.I/self.tau_s)*self.dt
-            I_instant = 0
-       
-        self.u = np.clip(self.u, 0, 1)
-        self.x = np.clip(self.x, 0, 1)
+        #all neurons that spiked en regardant spiie_trace de s.i:
 
-        self.spike_trace.append(spike_bool)
-        self.x_trace.append(self.x)
-        self.u_trace.append(self.u)
-        self.I_trace.append(I_instant)
+        I_instant = np.zeros(self.N)
+        self.u[spike_bool]+= self.U_ds[spike_bool] * (1- self.u[spike_bool])
+        self.x[spike_bool] *= (1-self.u[spike_bool])
+        I_instant[spike_bool] = self.W_n[spike_bool] * self.u[spike_bool] *self.x[spike_bool]
+            
+        self.u[~spike_bool] *= np.exp(-self.dt/self.F_ds[~spike_bool])    
+        self.x[~spike_bool] *= 1 - (1 - self.x[~spike_bool]) * np.exp(-self.dt/self.D_ds[~spike_bool])
 
         return I_instant
     

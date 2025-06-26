@@ -126,21 +126,15 @@ def maass_distance(u, v, dt, tau=0.005, T=0.5):
     distance = np.sqrt(np.sum(diff**2) * dt) / np.sqrt(T)
     return distance
 
+
 def trajectory_distance(liquid1, liquid2, dt, T):
     D = []
+    U1 = liquid1.U_trace
+    U2 = liquid2.U_trace
     for step in range(int(T/dt)):
-        s1 = []
-        s2 = []
-        for n in range(len(liquid1)):
-            s1.append(liquid1[n].U_trace[step])
-            s2.append(liquid2[n].U_trace[step])
-        s1 = np.array(s1)
-        s2 = np.array(s2)
-        d_step = np.linalg.norm(s1-s2)
-        D.append(d_step)
+        D.append(np.linalg.norm(U1[step] -U2[step]))
 
     return D
-
 
 
 def assign_exc_inh(N, apply_dale, p_inh):
@@ -374,16 +368,18 @@ def plot_neurons_trace(liquid_neurons):
     ax1 = fig.add_subplot(3,1,1)
     ax2 = fig.add_subplot(3,1,2)
     ax3 = fig.add_subplot(3,1,3)
-    spike_trace = []
+    st = []
     sum_trace = []
     fig.suptitle("Liquid Trace")
-    for n in liquid_neurons:
-        spike_trace.append(np.where(np.array(n.spike_trace) == True)[0])
-        ax1.plot(n.U_trace)
-        sum_trace.append(np.array(n.spike_trace))
-    for neuron, t in enumerate(spike_trace):
-        ax2.scatter(t, [neuron] * len(t), color='blue', s=1, alpha=0.3)
+    U_trace = np.array(liquid_neurons.U_trace)
+    spike_trace = np.array(liquid_neurons.spike_trace)
+    for n in range(liquid_neurons.N):
+        ax1.plot(U_trace[:, n])
+        st.append(np.where(spike_trace[:, n] == True)[0])
+        sum_trace.append(spike_trace[: ,n])
     
+    for neuron, t in enumerate(st):
+        ax2.scatter(t, [neuron] * len(t), color='blue', s=1, alpha=0.3)
     ax1.axhline(liquid_default_parameters['U_threshold'], linestyle='--', color='black')
     sum_trace = np.array(sum_trace).astype(int)
     s = np.sum(sum_trace, axis=0)
@@ -395,3 +391,4 @@ def plot_neurons_trace(liquid_neurons):
     ax3.set_title("Number of emitted spikes")
     ax3.set_xlabel('Simulation step')
     plt.show()
+
