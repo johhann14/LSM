@@ -1,10 +1,27 @@
+"""
+File: lsm.py
+Author: Johann Ly 
+Mail: johann.ly@ecole.ensicaen.fr
+Date: 2025-06-15
+
+Class implementing a Liquid State Machine.
+
+References:
+    - W. Maass, T. Natschläger, H. Markram (2002). 
+        Real-Time Computing Without Stable States: A New Framework for Neural Computation Based on Perturbations.
+    
+    - R. de Azambuja, F. B. Klein, S. V. Adams, M. F. Stoelen, A. Cangelosi
+        Short-Term Plasticity in a Liquid State Machine Biomimetic Robot Arm Controller.
+"""
+
 import numpy as np 
 import matplotlib.pyplot as plt 
 import sys
-from utils import euclidean_distance, generate_neurons, probability_connection, make_input_layer, make_liquid_topology, assign_exc_inh, generate_synapses
+
+from utils import make_liquid_topology, assign_exc_inh
 from utils import liquid_default_parameters
+
 from synapse import Synapse
-from lif import LIF
 from lif import LIF
 
 class LSM:
@@ -15,22 +32,21 @@ class LSM:
 
     Initialisation of the reservoir's topology
     """
-    def __init__(self, N_liquid, N_input, liquid_net_shape, connections_parameters, p_inh, apply_dale, dt, lbd=1.2):
+    def __init__(self, N_liquid, N_input, liquid_net_shape, connections_parameters, p_inh, apply_dale, dt, enable_stp=True, lbd=1.2):
         """
         Reservoir initialisation method
-        N_r: number of internal units (neurons)
-        N_i : number of input units
-        net_shape: shape of the cortical column
-        w_in:
-        w_out:
-        distribution:
-        p_inh: probability of a neuron being inihibitory
-        refractory_time:
-        connections_parameters:
-        apply_dale: apply Dale's principle
-        lbd: 
 
+        N_liquid: number of liquid neurons
+        N_input: number of input layer neuron
+        liquid_net_shape: shape of the cortical column
+        connections_parameters: dictionnary to build the topology of the liquid
+        p_inh: probability of a neuron being inihibitory
+        apply_dale: apply Dale's principle
+        dt: time step used for the simulation
+        enable_stp: bool to indicate if we use STP or no
+        lbd:
         """
+
         self.N_liquid = N_liquid  
         self.N_input = N_input                                                        
         self.liquid_net_shape = liquid_net_shape
@@ -42,26 +58,58 @@ class LSM:
         self.apply_dale = apply_dale
         self.inh_liquid, self.exc_liquid, self.n_inh_liquid, self.n_exc_liquid = assign_exc_inh(N_liquid, apply_dale, p_inh)
 
-        self.liquid_topology = make_liquid_topology(connections_parameters, liquid_net_shape, self.inh_liquid, lbd)
+        self.topology = make_liquid_topology(connections_parameters, liquid_net_shape, self.inh_liquid, lbd)
         
-        self.liquid_neurons = LIF(N=N_liquid, params=liquid_default_parameters, dt=dt)
-        self.synapses = Synapse(self.liquid_topology['exc'] + self.liquid_topology['inh'], dt)
-        self.W_in = np.random.normal(size=(1, N_liquid)) #inverser les dim
+        self.neurons = LIF(N=N_liquid, params=liquid_default_parameters, inh_repartition=self.inh_liquid, dt=dt)
+        self.synapses = Synapse(self.topology['exc'] + self.topology['inh'], dt, enable_stp=enable_stp)
+        self.W_in = np.random.normal(size=(N_liquid, N_input)) #inverser les dim
+    
+    
+    def step(self, inp, Ic, noise_bool):
+        """
+        Advance the LSM by one time step
 
-    def forward(self, inp=None, Ic=None):
-        if inp:    
-            for i in range(self.N_liquid):
-                self.liquid_neurons.ie[i]+= self.W_in[0][i] * inp * Ic
-        
-        self.liquid_neurons.iteration()
+        Pipeline: Looping
+            - Update short-term plasticity on all synapses
+            - Inject the current from the synapses to the postsynaptic neurons
+            - Inject the current from the input layer (ie. from the encoded input signal) to the liquid's neurons
+            - Perfrom one iteration of the neurons of the liquid
+        """
+
+        # array of containing the index of all the presynaptic neuron
         pre_id = self.synapses.i.astype(np.int64)
+
+        # array of containing the index of all the presynaptic neuron
         post_id = self.synapses.j.astype(np.int64)
-        spike_bool = self.liquid_neurons.spiked_before[pre_id]
-        I = self.synapses.propagate(spike_bool)
-        self.liquid_neurons.ie[post_id] += I
+
+        # mask indicating which presynaptic neuron spiked
+        spike_mask = self.neurons.spiked_before[pre_id]
+        
+        # compute the synaptic current
+        I = self.synapses.update_stp(spike_mask)
+        
+        # injecting the synaptic current into the postsynaptic neurons
+        inh = I<0
+        exc = I>0
+        self.neurons.ii[post_id[inh]] += I[inh]
+        self.neurons.ie[post_id[exc]] += I[exc]
+
+        # injecting the current from the input layer to the liquid neurons
+        W_pos = np.maximum(self.W_in, 0)
+        W_neg = -np.minimum(self.W_in, 0)
+        I_exc = W_pos @ inp
+        I_inh = W_neg @ inp
+
+        self.neurons.ie+= I_exc * Ic
+        self.neurons.ii+= I_inh * Ic
+        #self.liquid_neurons.ie+= (self.W_in @inp) * Ic
+        
+        # update the neurons of the liquid         
+        self.neurons.iteration(noise_bool=noise_bool)
+        #faut mettre dans ie et ii selon la synapse
 
     def reset(self):
-        self.liquid_neurons.reset()
+        self.neurons.reset()
         self.synapses.reset()
 
     def paramaters(self):

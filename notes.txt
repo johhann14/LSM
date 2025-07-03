@@ -1,0 +1,40 @@
+problems from readout ? try another readout
+problems from liquid ? 
+problems from the input encoding ?
+problems from the input layer ?
+
+
+
+===============
+
+general pipeline of the liquid:
+1) update the synapses (they deliver current to the postneurons)
+2) liquid neurons recieve input curretn from the input layer
+3) iteration of the neurons
+
+we loop 
+
+What I have so far: 
+
+separation property seems ok
+memory curve from 0.8 to flat 0.6 not ok
+
+raw signal (T,)
+->
+rate encoding (T, n_input)
+->
+projection into the liquid via W_in (n_liquid, n_input)
+-> X (T,n_liquid)
+readout
+-> train Wout via X to predict y
+
+
+
+at first no noise to test 
+skip inital transient
+
+careful for the readout training if n_timesteps < n_liquid
+
+maybe try without stp at first but need to find good parameters 
+
+

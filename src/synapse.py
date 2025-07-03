@@ -1,12 +1,49 @@
+"""
+File: synapse.py
+Author: Johann Ly 
+Mail: johann.ly@ecole.ensicaen.fr
+Date: 2025-06-15
+
+Class implementing Short-Term synaptic plasticity.
+
+References:
+    - W. Maass, T. Natschläger, H. Markram (2002). 
+        Real-Time Computing Without Stable States: A New Framework for Neural Computation Based on Perturbations.
+    
+    - R. de Azambuja, F. B. Klein, S. V. Adams, M. F. Stoelen, A. Cangelosi
+        Short-Term Plasticity in a Liquid State Machine Biomimetic Robot Arm Controller.
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 
 class Synapse:
     """
     Synapse object following Markram and Tsodysk : Short-term synaptic plasticity: http://www.scholarpedia.org/article/Short-term_synaptic_plasticity 
+    
     Modelize the synapse and its dynamic behavior
+
     """
-    def __init__(self, list_connection_infos, dt):
+    def __init__(self, list_connection_infos, dt, enable_stp=True):
+        """
+        N: Number of synapses
+        i: index of the presynaptic neuron
+        j: index of the postsynaptic neuron
+        p_connection: ndarray of the synapses connections probablities
+        W_n: ndarray of scale 
+        U_ds: ndarray of use
+        D_ds: ndarray of depression time constant
+        F_ds: ndarray of facilitation time constant
+        delay_trans: ndarray of transmission delay
+        tau_s: ndarray of synapse time constant
+        t_connection: ndarray of connection type
+        x: ndarray of variables reprentating STD effect
+        u: ndarray of variables reprentating STF effect
+        enable_stp: bool indicating if we use STP or no
+        dt: time step used for the simulation
+        step: 
+        """
+
         self.N = len(list_connection_infos)
         self.i = np.zeros(self.N)
         self.j = np.zeros(self.N)
@@ -17,66 +54,101 @@ class Synapse:
         self.F_ds = np.zeros(self.N)
         self.delay_trans = np.zeros(self.N)
         self.tau_s = np.zeros(self.N)
+        self.t_connection = np.zeros(self.N)
         self.x = np.ones(self.N)
         self.u = np.zeros(self.N)
+        self.enable_stp = enable_stp
         for s in range(self.N):
             self.i[s] = list_connection_infos[s][0][0]
             self.j[s] = list_connection_infos[s][0][1]
             self.p_connection[s] = list_connection_infos[s][1]
             self.W_n[s], self.U_ds[s], self.D_ds[s], self.F_ds[s] = list_connection_infos[s][2]
             self.delay_trans[s] = list_connection_infos[s][3]
-            self.tau_s[s] = 3e-3 if self.i[s]==1 else 6e-3
-        
+            self.t_connection[s] = list_connection_infos[s][4][0] # here only taking i from t_connection = (i,j) / 1 is E and 0 is I
+            self.tau_s[s] = 3e-3 if self.t_connection[s] == 1 else 6e-3
         self.dt = dt
         self.step = 0
+        self.x_trace = []
+        self.u_trace = []
+        self.I_trace = []
     
     def reset(self):
         # Plasticity variables
         self.x = np.ones(self.N)
         self.u = np.zeros(self.N)
         self.step = 0
+        self.x_trace = []
+        self.u_trace = []
+        self.I_trace = []
     
-    def propagate(self, spike_bool):
+    def update_stp(self, spike_mask):
+        """
+        Update synaptic facilitation and depression variables according to the Tsodysk-Markram STP model.
+        Then, compute the instantenous synaptic current for each synapse
 
-        #all neurons that spiked en regardant spiie_trace de s.i:
+        Params:
+        
+        spike_mask: ndarray of bool indicating which presynaptic neuron fired at the previous step
 
+        """
         I_instant = np.zeros(self.N)
-        self.u[spike_bool]+= self.U_ds[spike_bool] * (1- self.u[spike_bool])
-        self.x[spike_bool] *= (1-self.u[spike_bool])
-        I_instant[spike_bool] = self.W_n[spike_bool] * self.u[spike_bool] *self.x[spike_bool]
+
+        # Update of depression and facilitation variables for the synapses whom their presynaptic neuron spiked at the previous time
+        self.u[spike_mask]+= self.U_ds[spike_mask] * (1- self.u[spike_mask])
+        self.x[spike_mask] *= (1-self.u[spike_mask])
             
-        self.u[~spike_bool] *= np.exp(-self.dt/self.F_ds[~spike_bool])    
-        self.x[~spike_bool] *= 1 - (1 - self.x[~spike_bool]) * np.exp(-self.dt/self.D_ds[~spike_bool])
+        # Update of depression and facilitation variables for the synapses whom their presynaptic neuron did not spike at the previous time
+        self.u[~spike_mask] *= np.exp(-self.dt/self.F_ds[~spike_mask])    
+        self.x[~spike_mask] = 1 - (1 - self.x[~spike_mask]) * np.exp(-self.dt/self.D_ds[~spike_mask])
+        
+        # compute the instantenous synaptic current for each synapse
+        I_instant[spike_mask] = self.W_n[spike_mask] * self.u[spike_mask] *self.x[spike_mask]
+        
+        # if we disable stp, compute the instantenous synaptic current 
+        if not self.enable_stp:
+            I_instant = self.W_n
+
+        # keeping trace of everything
+        self.x_trace.append(self.x.copy())
+        self.u_trace.append(self.u.copy())
+        self.I_trace.append(I_instant.copy())
 
         return I_instant
     
-    def plot(self):
+
+
+    def plot(self, N):
         """
-        if self.t_connection[0] == 1: # EXC
-            col='red'
-        else:
-            col='blue'
+        Plot the depression, facilitation variables and
+        the delivered current of each synapse through time.
+
+        Params:
+
+        N: how many synapses we want to plot (choosed randomly)
         """
         fig = plt.figure(figsize=(8,6))
         fig.suptitle("Synapse\'s parameters")
+        x_trace = np.array(self.x_trace)
+        u_trace = np.array(self.u_trace)
+        I_trace = np.array(self.I_trace)
+        index = np.random.choice(np.arange(0, self.N), N, False)
         ax1 = fig.add_subplot(3,1,1)
-        ax1.plot(self.x_trace, c='red')
-        ax1.set_ylabel('x')
-        ax1.set_xlim(0, 300)
         ax2 = fig.add_subplot(3,1,2)
-        ax2.plot(self.u_trace, c='blue')
-        ax2.set_ylabel('u')
-        ax2.set_xlim(0,300)
         ax3 = fig.add_subplot(3,1,3)
-        ax3.plot(self.I_trace, c='green')
+        print(x_trace.shape, u_trace.shape, I_trace.shape)
+        for s in index:
+            ax1.plot(x_trace[:, s])
+            ax2.plot(u_trace[:, s])
+            ax3.plot(I_trace[:, s])
+        ax1.set_ylabel('x')
+        ax2.set_ylabel('u')
         ax3.set_ylabel('I')
         ax3.set_xlabel('t')
-        ax3.set_xlim(0,300)
         plt.show()
 
         
 
-
+    """
     def parameters(self):
         print(f'\n----------------------------------------------\n')
         print(f'Synapse\'s parameters :')
@@ -97,3 +169,4 @@ class Synapse:
         print(f'\t steps : {self.step}')
         print(f'\t nb : {self.nb}')
         print(f'\n----------------------------------------------\n')
+    """

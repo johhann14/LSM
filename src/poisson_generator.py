@@ -1,9 +1,21 @@
+"""
+File: poisson_generator.py
+Author: Johann Ly 
+Mail: johann.ly@ecole.ensicaen.fr
+Date: 2025-06-15
+
+Class implementing a poisson generator with constant firing rate.
+
+References:
+    - Baxter Barlow. 
+            https://medium.com/@baxterbarlow/poisson-spike-generators-stochastic-theory-to-python-code-a76f8cc7cc32
+"""
+
 import numpy as np 
 
 class PoissonSpikeGenerator:
     """
-    Poisson Spike Generator based on : https://medium.com/@baxterbarlow/poisson-spike-generators-stochastic-theory-to-python-code-a76f8cc7cc32
-    Baxter Barlow
+    Poisson Spike Generator.
     """
     def __init__(self, dt, T):
         """

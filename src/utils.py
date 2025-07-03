@@ -1,3 +1,20 @@
+"""
+File: utils.py
+Author: Johann Ly 
+Mail: johann.ly@ecole.ensicaen.fr
+Date: 2025-06-15
+
+File containing helper functions and STP/LIF parameters.
+
+References:
+    - W. Maass, T. Natschläger, H. Markram (2002). 
+        Real-Time Computing Without Stable States: A New Framework for Neural Computation Based on Perturbations.
+    
+    - R. de Azambuja, F. B. Klein, S. V. Adams, M. F. Stoelen, A. Cangelosi
+        Short-Term Plasticity in a Liquid State Machine Biomimetic Robot Arm Controller.
+"""
+
+
 from lif import LIF
 import numpy as np 
 import matplotlib.pyplot as plt
@@ -10,33 +27,14 @@ from synapse import Synapse
 # I = 0
 connections_parameters = {
     #(i,j) = [C, U(use), D(time constant for depression in s), F(time constant for facilitation in s), A(scaling parameter in nA), transmission delay]
-    (0,0) : [0.1,              # C
-             0.32,             # Use (U) 
-             0.144e-3,            # tau Depression (D) in ms
-             0.06e-3,             # tau Facilication (F) in ms
-             -47e-9,           # Scaling (A) in nA
-             0.8e-3],          # Transmission Delay
+    #(i,j) = [C, U, D, F, A, transmission_delay]
+    (0,0) : [0.1, 0.32, 0.144, 0.06, -47e-9, 0.8e-3],       # (II)
 
-    (0,1) : [0.4,
-             0.25,
-             0.7e-3,
-             0.02e-3,
-             -47e-9,
-             0.8e-3],
+    (0,1) : [0.4, 0.25, 0.7, 0.02, -47e-9, 0.8e-3],         # (IE)
 
-    (1,0) : [0.2,
-             0.05,
-             0.125e-3,
-             1.2e-3,
-             150e-9,
-             0.8e-3,],
+    (1,0) : [0.2, 0.05, 0.125, 1.2, 150e-9, 0.8e-3],        # (EI)
 
-    (1,1) : [0.3,
-             0.5,
-             1.1e-3,
-             0.05e-3,
-             70e-9,
-             1.5e-3,]
+    (1,1) : [0.3, 0.5, 1.1, 0.05, 70e-9, 1.5e-3,]           # (EE)
 
 }
 
@@ -46,12 +44,12 @@ liquid_default_parameters = {
     'tau_se' : 3e-3,                    # Synapse time constant (exc. tausyne) s
     'tau_si' : 6e-3,                    # Synapse time constant (inh. taysyni) s
     'refrac_period_e' : 3e-3,           # Refactory period (exc.) s
-    'refrec_period_i' : 2e-3,           # Refractory perdiod (inh.) s
+    'refrac_period_i' : 2e-3,           # Refractory perdiod (inh.) s
     'U_threshold' : 15e-3,              # Membrane threshold V
     'U_reset' : [13.8e-3, 14.5e-3],     # Membrane Reset V
     'U_initial' : [13.5e-3, 14.9e-3],   # Membrane Initial V
     'i_offset' : [13.5e-9, 14.5e-9],    # i_offset A
-    'i_noise_mu' : 0,                # i_noise mu A
+    'i_noise_mu' : 0,                   # i_noise mu A
     'i_noise_scale' : 1.0e-9,           # i_noise scale A
     'transmission_delay_e' : 1.5e-3,    # Transmission delay (exc.) s
     'transmission_delay_i' : 0.8e-3     # Transmission delay (inh.) s
@@ -75,57 +73,23 @@ def probability_connection(C, distance, lbd):
 
 
 
-def generate_neurons(N, dt):
-    """
-    Generate N LIF neurons
-
-    Returns
-        Array of neurons
-    """
-    print(f'Generate neurons : Begin...')
-    neurons_list = [LIF(params=liquid_default_parameters, dt=dt) for _ in range(N)]
-    print(f'Generate neurons : Done!')
-    return neurons_list
-
-def generate_synapses(synapses_infos_list):
-    print(f'Generate synapses : Begin...')
-    out = []
-    for synapse_infos in synapses_infos_list:
-        out.append(Synapse(synapse_infos, dt=1e-3))
-    print(f'Generate synapses : Done...')
-    return out
-        
-
-def generate_input(generator, n_input, rate):
-    input_list = []
-    generator_list = []
-    for i in range(n_input):
-        tmp = np.zeros(generator.n_steps)
-        spike_inputs = generator.generate(rate)
-        tmp[spike_inputs] = 1
-        generator_list.append(tmp)
-        input_list.append(spike_inputs)
-    return input_list, generator_list
-
-
-
+#====== For the separation property ============
 def gaussian_kernel(tau, dt):
     t = np.arange(-3*tau, 3*tau + dt, dt)
     g = np.exp(-(t/tau)**2)
-    return g / np.sum(g)  # Normalisation masse unitaire
+    return g / np.sum(g)  
 
 def continuous_representation(spike_train, tau, dt):
     kernel = gaussian_kernel(tau, dt)
     convolved = convolve(spike_train, kernel, mode='full')[:len(spike_train)]
     return convolved
 
-def maass_distance(u, v, dt, tau=0.005, T=0.5):
+def maass_distance(u, v, dt, T=0.5, tau=0.005):
     u_cont = continuous_representation(u, tau, dt)
     v_cont = continuous_representation(v, tau, dt)
     diff = u_cont - v_cont
     distance = np.sqrt(np.sum(diff**2) * dt) / np.sqrt(T)
     return distance
-
 
 def trajectory_distance(liquid1, liquid2, dt, T):
     D = []
@@ -136,23 +100,26 @@ def trajectory_distance(liquid1, liquid2, dt, T):
 
     return D
 
+#===============================================================
+
 
 def assign_exc_inh(N, apply_dale, p_inh):
     """
     Assigns randomly index for inhbitory and excitatory neurons given a probability p_inh
     """
     if apply_dale:
-        inh = np.random.rand(N,1) < p_inh
+        inh = np.random.rand(N) < p_inh
         exc = ~inh #inversing bits
         
     else:
-        inh = np.random.rand(N,1) < 0
+        inh = np.random.rand(N) < 0
         exc = ~inh
 
     n_inh = len(np.where(inh==True)[0])
     n_exc = N - n_inh
 
     return inh, exc, n_inh, n_exc
+
 
 def mapping_reservoir(liquid_net_shape):
     """
@@ -175,22 +142,10 @@ def mapping_reservoir(liquid_net_shape):
     print('Mapping : Done!')
     return positions_list
 
-def make_input_layer(N_input, N_liquid, w_in, density):
-    n_connections = int(density * N_liquid)
-    W_in = np.zeros((N_input, N_liquid))
-    random_index = np.random.choice(np.arange(0, n_connections, 1), n_connections, False)
-    r1 = random_index[:int(len(random_index)/2)]
-    r2 = random_index[int(len(random_index)/2):]
-    for i in range(N_input):
-        W_in[i, r1] = w_in
-        W_in[i, r2] = -w_in 
-    return W_in
 
 def make_liquid_topology(connections_parameters, net_shape, inh_liquid, lbd):
     """
     Create the topology of the reservoir and generates the connections of the reservoir.
-    2 ways : fixed weights or Short-term synaptic plasticity 
-    (for STP, changed de probability connection)
     """
 
     print('Creation of the reservoir topology : Begin...')
@@ -231,12 +186,12 @@ def make_liquid_topology(connections_parameters, net_shape, inh_liquid, lbd):
                         (t_pre, t_pos) = (1,1)
 
                 #Synapse's parameters following Maass 2002
-                CGupta=connections_parameters[(t_pre,t_pos)][0] 		# Parameter used at the connection probability - from Maass2002 paper
-                UMarkram=connections_parameters[(t_pre,t_pos)][1]     	# Use (U) - Parameter used at the Dynamic Synapse - from Maass2002 paper
-                DMarkram=connections_parameters[(t_pre,t_pos)][2]    	# (second) Time constant for Depression (tau_rec) - used at the Dynamic Synapse - from Maass2002 paper					
-                FMarkram=connections_parameters[(t_pre,t_pos)][3]    	# (second) Time constant for Facilitation (tau_facil) - used at the Dynamic Synapse - from Maass2002 paper
-                AMaass=connections_parameters[(t_pre,t_pos)][4]       	# (nA) In the Maass2002 paper the value is negative, but because I need a positive scale (random.normal parameter) and there is a negative sign in front of the abs function I changed this to positive
-                Delay_trans=connections_parameters[(t_pre,t_pos)][5] 	# (msecond) In Maass paper the transmission delay is 0.8 to II, IE and EI and 1.5 to EE
+                C=connections_parameters[(t_pre,t_pos)][0] 		
+                UMarkram=connections_parameters[(t_pre,t_pos)][1]     	
+                DMarkram=connections_parameters[(t_pre,t_pos)][2]    				
+                FMarkram=connections_parameters[(t_pre,t_pos)][3]    	
+                AMaass=connections_parameters[(t_pre,t_pos)][4]       	
+                Delay_trans=connections_parameters[(t_pre,t_pos)][5]
 
                 U_ds=abs(np.random.normal(loc=UMarkram, scale=UMarkram/2))
                 """
@@ -266,7 +221,7 @@ def make_liquid_topology(connections_parameters, net_shape, inh_liquid, lbd):
                     W_n = A_sample
                 """
                 d = euclidean_distance(positions_list[i], positions_list[j])
-                p_connection = probability_connection(CGupta, d, lbd)
+                p_connection = probability_connection(C, d, lbd)
 
                 t_connection = (t_pre, t_pos)
                 if np.random.uniform() <= p_connection:
@@ -277,7 +232,7 @@ def make_liquid_topology(connections_parameters, net_shape, inh_liquid, lbd):
                             (
                                 (i,j),
                                 p_connection,
-                                (W_n, U_ds, D_ds, F_ds),
+                                (-W_n, U_ds, D_ds, F_ds), #added the sign here
                                 Delay_trans,
                                 t_connection
                             )       
@@ -298,6 +253,7 @@ def make_liquid_topology(connections_parameters, net_shape, inh_liquid, lbd):
     print('Creation of the reservoir : Done!')
     
     return {'exc':connections_exc, 'inh':connections_inh, 'pos':positions_list}
+
 
 def plot_liquid(topology, inh_liquid):
     """
@@ -364,6 +320,9 @@ def plot_liquid(topology, inh_liquid):
 
 
 def plot_neurons_trace(liquid_neurons):
+    """
+    Plot membrane potential, spike trace of the liquid through time
+    """
     fig = plt.figure(figsize=(15,10))
     ax1 = fig.add_subplot(3,1,1)
     ax2 = fig.add_subplot(3,1,2)
