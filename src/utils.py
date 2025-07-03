@@ -350,6 +350,6 @@ def plot_neurons_trace(liquid_neurons):
     ax2.set_title("Liquid pattern")
     ax3.set_title("Number of emitted spikes")
     ax3.set_xlabel('Simulation step')
-    # plt.savefig("results/test_lsm_uniform_input/liquid_trace.png")
+    #plt.savefig("results/test_lsm_with_noise/liquid_trace.png")
     plt.show()
 

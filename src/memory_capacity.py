@@ -31,7 +31,7 @@ T               = n_steps * dt
 Ic              = 7e-11
 n_trial         = 200
 n_input         = 300
-enable_noise    = False
+enable_noise    = True
 
 np.random.seed(42)
 
@@ -99,7 +99,7 @@ plt.ylim(0,1.2)
 plt.xlim(0, D_max +2)
 plt.legend()
 plt.grid()
-# plt.savefig("results/test_lsm_uniform_input/memory_capacity.png")
+plt.savefig("results/test_lsm_with_noise/memory_capacity.png")
 plt.show()
 
 

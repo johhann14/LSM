@@ -14,6 +14,8 @@ STP and LIF parameters are in utils.py \
 
 Figure for LIF, synapse and liquid's topology, separation property and memory curve are in results/
 
+I also did not yest implement the transmission delay.
+
 
 
 ## Personal Notes
