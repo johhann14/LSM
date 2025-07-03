@@ -5,7 +5,7 @@ import copy
 from lsm import LSM
 from utils import connections_parameters, plot_neurons_trace
 from input_encoder import InputEncoder
-from readout import Readout
+from need_to_update_later.readout import Readout
 from sklearn.metrics import r2_score
 
 p_inh = 0.2

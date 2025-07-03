@@ -95,6 +95,14 @@ class LSM:
         self.neurons.ie[post_id[exc]] += I[exc]
 
         # injecting the current from the input layer to the liquid neurons
+
+        # first way
+
+        """
+        self.neurons.ie += Ic * (self.W_in @ inp)
+        """
+
+        # second way 
         W_pos = np.maximum(self.W_in, 0)
         W_neg = -np.minimum(self.W_in, 0)
         I_exc = W_pos @ inp

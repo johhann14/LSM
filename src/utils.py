@@ -313,6 +313,7 @@ def plot_liquid(topology, inh_liquid):
     ax2.set_xlabel('x')
     ax2.set_ylabel('y')
     ax2.set_zlabel('z')
+    #plt.savefig("results/liquid_topology.png")
     plt.show()
     print('Plotting the liquid : Done!')
 

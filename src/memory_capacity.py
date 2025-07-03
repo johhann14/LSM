@@ -2,7 +2,7 @@
 File: memory_capacity.py
 Author: Johann Ly 
 Mail: johann.ly@ecole.ensicaen.fr
-Date: 2025-06-15
+Date: 2025-06-30
 
 File to test if we have the memory capacity
 

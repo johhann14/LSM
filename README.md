@@ -9,6 +9,11 @@ Building a Liquid State Machine with Short-Term Plasticity from scratch based on
 
 ## Notes
 
+STP and LIF parameters are in utils.py
+
+
+# Personal Notes
+
 at first, I only had one current channel for the lif neurons and was doing the current decay into the synapse's model as in : http://www.scholarpedia.org/article/Short-term_synaptic_plasticity
 
 but here, 2 current channels (inh. and exc.) from the differential equation from :
