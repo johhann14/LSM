@@ -144,6 +144,7 @@ class Synapse:
         ax2.set_ylabel('u')
         ax3.set_ylabel('I')
         ax3.set_xlabel('t')
+        # plt.savefig("results/test_lsm_uniform_input/synapses.png")
         plt.show()
 
         

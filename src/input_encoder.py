@@ -47,6 +47,7 @@ class InputEncoder():
         ax2.scatter(times, neurons, s=1, alpha=0.3)     
         ax2.set_xlabel("Time step")
         ax2.set_ylabel("Input neurons index")
+        # plt.savefig("results/test_lsm_uniform_input/input.png")
         plt.show()
 
 

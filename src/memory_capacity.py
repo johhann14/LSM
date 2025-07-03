@@ -95,10 +95,11 @@ plt.title("Memory capacity (Shor-term memory from Jaeger) with dt=2ms and T= 2s"
 plt.plot(range(1, D_max+1), mc_d, label='Memory Curve')
 plt.ylabel("Correlation coefficient")
 plt.xlabel("Delay step d")
-plt.ylim(0,2)
+plt.ylim(0,1.2)
 plt.xlim(0, D_max +2)
 plt.legend()
 plt.grid()
+# plt.savefig("results/test_lsm_uniform_input/memory_capacity.png")
 plt.show()
 
 
